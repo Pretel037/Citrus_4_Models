@@ -2,7 +2,7 @@
 tensorflow==2.17.0  # or a later compatible version
 
 # Compatible version of numpy
-numpy>=1.26.0,<2.0.0
+numpy>=1.26.0
 
 # OpenCV (choose one of the two OpenCV packages)
 opencv_contrib_python==4.9.0.80  # if you need the contrib modules
