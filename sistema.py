@@ -1,66 +1,73 @@
+import os
 import streamlit as st
 import tensorflow as tf
+from tensorflow.keras.utils import load_img, img_to_array
 import numpy as np
 import cv2
 from PIL import Image
-import os
-from datetime import datetime
+import pandas as pd
+
+# Configuraciones de entorno
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# Define la ruta base donde se encuentran los modelos
+base_path = os.path.join(os.getcwd(), 'Models')
+
+# Cargar los modelos
+model_path_1 = os.path.join(base_path, 'resnet_50.keras')
+model = tf.keras.models.load_model(model_path_1)
+
+# Función para predecir la imagen y devolver la etiqueta y la precisión
+def imagePrediction(image):
+    images = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    images = cv2.resize(images, (150, 150))
+    images = images.reshape(1, 150, 150, 3)
+    prd_idx = model.predict(images)
+    prd_idx = np.argmax(prd_idx, axis=1)[0]
+    modelpre = model.predict(images)
+    accuracy = modelpre[0][prd_idx]
+
+    if prd_idx == 0:
+        label = "CONTROL"
+    elif prd_idx == 1:
+        label = "Alzheimer's Disease"
+    elif prd_idx == 2:
+        label = "Parkinson's Disease"
+    else:
+        label = "Unknown"
+
+    return label, accuracy
+
+# Interfaz de usuario con Streamlit
+st.title("Prediction of Neurodegenerative Diseases")
+
+# Inicializar el estado de sesión si no existe
+if 'results' not in st.session_state:
+    st.session_state.results = []
+
+# Subir nuevas imágenes
+uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+
+if uploaded_files:
+    new_results = []
+
+    for uploaded_file in uploaded_files:
+        image = Image.open(uploaded_file)
+        st.image(image, caption='Uploaded Image.', use_column_width=True)
+        
+        
+        label, accuracy = imagePrediction(image)
+        st.write(f'Model predicts that this is a {label} with an accuracy of {accuracy:.2f}')
+        
+        # Guardar resultados nuevos
+        new_results.append({
+            'Image': uploaded_file.name,
+            'Label': label,
+            'Accuracy': f'{accuracy:.2f}'
+        })
+
+    # Agregar solo los resultados nuevos al estado de sesión
+    st.session_state.results.extend(new_results)
 
 
-# Cargar modelos TFLite con rutas relativas
-model_paths = {
-    "DenseNet121": "models/densetnet_121.tflite",
-    "Modelo 2": "models/GoogleNetLite.tflite",
-    "Modelo 3": "models/densetnet_121.tflite",
-    "Modelo 4": "models/citrus_modelLite.tflite"
-}
-
-# Crear un diccionario para los intérpretes de TFLite
-interpreters = {name: tf.lite.Interpreter(model_path=path) for name, path in model_paths.items()}
-for interpreter in interpreters.values():
-    interpreter.allocate_tensors()
-# Crear directorio para guardar imágenes
-image_folder = "imagenes"
-if not os.path.exists(image_folder):
-    os.makedirs(image_folder)
-
-# Función para predecir usando el modelo seleccionado
-def image_prediction(image, interpreter):
-    # Preprocesar la imagen
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    image = cv2.resize(image, (265, 265))
-    image = np.expand_dims(image, axis=0).astype(np.float32)
-
-    # Ejecutar predicción
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    interpreter.set_tensor(input_details[0]['index'], image)
-    interpreter.invoke()
-    pred = interpreter.get_tensor(output_details[0]['index'])[0]
-    pred_class = np.argmax(pred)
-
-    # Mapear a etiquetas de enfermedades
-    labels = ["Mancha Negra", "Cancro", "Enverdecimiento", "Saludable"]
-    return labels[pred_class]
-
-# Interfaz de Streamlit
-st.title("CITRUS")
-
-# Seleccionar modelo
-selected_model_name = st.selectbox("Selecciona el modelo para predicción", list(interpreters.keys()))
-selected_interpreter = interpreters[selected_model_name]
-
-# Capturar imagen desde la cámara
-image = st.camera_input("Captura una imagen para analizar")
-
-if image:
-    # Guardar imagen en la carpeta
-    image_file = Image.open(image)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    image_path = os.path.join(image_folder, f"captura_{timestamp}.png")
-    image_file.save(image_path)
-    st.write(f"Imagen guardada en {image_path}")
-
-    # Predecir con el modelo seleccionado
-    result = image_prediction(image_file, selected_interpreter)
-    st.write(f"El modelo predice que la imagen tiene: {result}")
